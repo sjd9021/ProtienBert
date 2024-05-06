@@ -153,6 +153,9 @@ dmypy.json
 cython_debug/
 influenza.faa
 parsed_sequences.txt
+kmers5.txt
+kmers4.txt
+kmers3.txt
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

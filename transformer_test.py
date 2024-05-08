@@ -4,17 +4,24 @@ import torch.optim as optim
 from torch.nn import functional as F
 
 # Hyperparameters
-batch_size = 64
-block_size = 128
-max_iters = 500
-eval_interval = 100
-learning_rate = 3e-4
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-n_embd = 384
-n_head = 6
-n_layer = 6
-dropout = 0.2
+# Hyperparameters adjusted for M1 Mac capabilities
+batch_size = 32  # Reduced batch size to ensure it fits in memory and allows for faster computation
+block_size = 128  # Can keep the same if it fits the model’s context needs
+max_iters = 500   # Suitable for initial tests
+eval_interval = 1  # More frequent evaluations to monitor progress more closely
+learning_rate = 3e-4  # Generally a good starting point, adjust based on the obgity served convergence
+device = 'mps'  # Using Apple Metal Performance Shaders for training on M1 GPU
+n_embd = 256  # Slightly reduced to save memory and compute resources
+n_head = 4    # Reduced to decrease complexity and improve speed
+n_layer = 4   # Fewer layers to test initial training performance without overloading the system
+dropout = 0.1  # Slightly lower to compensate for smaller model and less data per batch
 torch.manual_seed(1337)
+
+# Define early stopping parameters
+early_stopping_patience = 10  # Number of eval intervals to wait for improvement
+target_loss = 0.001  # Target loss threshold for early stopping
+best_val_loss = float('inf')
+patience_counter = 0
 
 # Reading and encoding functions
 def read_kmers(file_path):
@@ -36,7 +43,6 @@ def train_val_test_split(data, train_frac=0.7, val_frac=0.15):
     val_end = train_end + int(len(data) * val_frac)
     return data[:train_end], data[train_end:val_end], data[val_end:]
 
-# Transformer Model Definition
 class TransformerModel(nn.Module):
     def __init__(self, vocab_size, n_embd, n_head, n_layer, dropout):
         super().__init__()
@@ -57,17 +63,14 @@ class TransformerModel(nn.Module):
             return logits, loss
         return logits
 
-# Load data and prepare for training
-kmers = read_kmers('train_subset.txt')
+kmers = read_kmers('/Users/admin/ProtienBert/train_subset.txt')
 stoi, itos = create_vocabulary(kmers)
 data_indices = torch.tensor(encode(kmers, stoi), dtype=torch.long).to(device)
 train_data, val_data, test_data = train_val_test_split(data_indices)
 
-# Initialize model and optimizer
 model = TransformerModel(len(stoi), n_embd, n_head, n_layer, dropout).to(device)
 optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 
-# Batch preparation function
 def get_batch(data):
     start_indices = torch.randint(0, len(data) - block_size, (batch_size,))
     sequences = torch.stack([data[start:start + block_size] for start in start_indices])
@@ -76,7 +79,6 @@ def get_batch(data):
     sequences[mask] = stoi['[MASK]']
     return sequences, targets, mask
 
-# Training and evaluation loop
 def evaluate(model, data):
     model.eval()
     total_loss = 0
@@ -94,11 +96,26 @@ for i in range(max_iters):
     _, loss = model(sequences.to(device), mask.to(device))
     loss.backward()
     optimizer.step()
-
     if i % eval_interval == 0:
         val_loss = evaluate(model, val_data)
         print(f"Iteration {i}, Training Loss: {loss.item():.4f}, Validation Loss: {val_loss:.4f}")
+   # Check for early stopping conditions
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0  # Reset counter
+        else:
+            patience_counter += 1
 
-# Final evaluation on the test dataset
+        if val_loss <= target_loss:
+            print("Early stopping triggered: Target validation loss achieved.")
+            break
+        elif patience_counter >= early_stopping_patience:
+            print("Early stopping triggered: No improvement in validation loss.")
+            break
+
 test_loss = evaluate(model, test_data)
 print(f"Final Test Loss: {test_loss:.4f}")
+
+# Save the model
+torch.save(model.state_dict(), 'ProtienBert.pth')
+print("Model saved successfully.")

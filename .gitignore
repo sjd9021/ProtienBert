@@ -158,6 +158,7 @@ kmers4.txt
 kmers3.txt
 kmers_masked3.txt
 kmers.txt
+train_subset.txt
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
